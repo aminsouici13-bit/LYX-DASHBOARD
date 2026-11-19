@@ -1,86 +1,115 @@
 
 const express = require("express");
 const session = require("express-session");
+const crypto = require("crypto");
 
 const app = express();
 
+app.set("trust proxy", 1);
 app.use(express.json());
 
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI;
+const SESSION_SECRET = process.env.SESSION_SECRET;
+
+if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI || !SESSION_SECRET) {
+  console.error("Missing environment variables!");
+  process.exit(1);
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  name: "lyx.sid",
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
-    secure: true,
+    secure: "auto",
     httpOnly: true,
     sameSite: "lax",
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI;
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
 
 app.get("/", (req, res) => {
-  if (!req.session.user) {
-    return res.send(`
-      <html>
-      <head>
-        <title>LYX SYSTEM</title>
-        <style>
-          body {
-            background:#080808;
-            color:white;
-            font-family:Arial;
-            text-align:center;
-            padding-top:120px;
-          }
-          h1 {color:#a855f7;font-size:42px}
-          a {
-            background:#5865F2;
-            color:white;
-            padding:15px 25px;
-            text-decoration:none;
-            border-radius:10px;
-          }
-        </style>
-      </head>
-      <body>
-        <h1>LYX SYSTEM</h1>
-        <h2>Dashboard</h2>
-        <a href="/login">Login with Discord</a>
-      </body>
-      </html>
-    `);
-  }
-
-  res.redirect("/dashboard");
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>LYX SYSTEM</title>
+      <style>
+        body {
+          background:#080808;
+          color:white;
+          font-family:Arial;
+          text-align:center;
+          padding-top:100px;
+        }
+        h1 {color:#a855f7;font-size:42px}
+        a {
+          display:inline-block;
+          background:#5865F2;
+          color:white;
+          padding:15px 25px;
+          text-decoration:none;
+          border-radius:10px;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>LYX SYSTEM</h1>
+      <h2>Dashboard</h2>
+      <p>Welcome to LYX Dashboard</p>
+      <a href="/login">Login with Discord</a>
+    </body>
+    </html>
+  `);
 });
 
-app.get("/login", (req, res) => {
-  const state = require("crypto").randomBytes(24).toString("hex");
+app.get("/login", (req, res, next) => {
+  const state = crypto.randomBytes(32).toString("hex");
+
   req.session.oauthState = state;
 
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    response_type: "code",
-    scope: "identify guilds",
-    state
-  });
+  req.session.save(err => {
+    if (err) return next(err);
 
-  res.redirect(
-    "https://discord.com/oauth2/authorize?" + params.toString()
-  );
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT_URI,
+      response_type: "code",
+      scope: "identify guilds",
+      state
+    });
+
+    res.redirect(
+      "https://discord.com/oauth2/authorize?" +
+      params.toString()
+    );
+  });
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
   try {
-    if (!req.query.code ||
-        !req.query.state ||
-        req.query.state !== req.session.oauthState) {
-      return res.status(400).send("Invalid OAuth state");
+    const { code, state } = req.query;
+
+    if (!code || !state || !req.session.oauthState ||
+        state !== req.session.oauthState) {
+      return res.status(400).send(
+        "Invalid OAuth state. Please return and login again."
+      );
     }
 
     delete req.session.oauthState;
@@ -96,7 +125,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           client_id: CLIENT_ID,
           client_secret: CLIENT_SECRET,
           grant_type: "authorization_code",
-          code: req.query.code,
+          code,
           redirect_uri: REDIRECT_URI
         })
       }
@@ -105,53 +134,55 @@ app.get("/auth/discord/callback", async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      return res.status(400).send("Discord login failed");
+      console.error("Token error:", tokenData);
+      return res.status(400).send("Discord token exchange failed.");
     }
 
-    const userResponse = await fetch(
-      "https://discord.com/api/users/@me",
-      {
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`
-        }
-      }
-    );
+    const headers = {
+      Authorization: `Bearer ${tokenData.access_token}`
+    };
+
+    const [userResponse, guildResponse] = await Promise.all([
+      fetch("https://discord.com/api/users/@me", { headers }),
+      fetch("https://discord.com/api/users/@me/guilds", { headers })
+    ]);
+
+    if (!userResponse.ok || !guildResponse.ok) {
+      return res.status(400).send("Failed to load Discord account.");
+    }
 
     const user = await userResponse.json();
-
-    if (!userResponse.ok) {
-      return res.status(400).send("Could not get Discord user");
-    }
-
-    const guildResponse = await fetch(
-      "https://discord.com/api/users/@me/guilds",
-      {
-        headers: {
-          Authorization: `Bearer ${tokenData.access_token}`
-        }
-      }
-    );
-
     const guilds = await guildResponse.json();
 
-    if (!guildResponse.ok) {
-      return res.status(400).send("Could not get Discord servers");
-    }
-
     await new Promise((resolve, reject) => {
-      req.session.regenerate(err => err ? reject(err) : resolve());
+      req.session.regenerate(err => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
 
-    req.session.user = user;
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      avatar: user.avatar
+    };
+
     req.session.guilds = guilds.filter(guild =>
       (Number(guild.permissions) & 0x20) === 0x20
     );
 
-    res.redirect("/dashboard");
+    req.session.save(err => {
+      if (err) {
+        console.error(err);
+        return res.status(500).send("Session save failed.");
+      }
+
+      res.redirect("/dashboard");
+    });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).send("Dashboard error");
+    console.error("OAuth error:", error);
+    res.status(500).send("Internal dashboard error.");
   }
 });
 
@@ -161,6 +192,7 @@ app.get("/dashboard", (req, res) => {
   }
 
   const user = req.session.user;
+
   const avatar = user.avatar
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
     : "";
@@ -168,15 +200,17 @@ app.get("/dashboard", (req, res) => {
   const guilds = req.session.guilds || [];
 
   res.send(`
+    <!DOCTYPE html>
     <html>
     <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>LYX SYSTEM</title>
       <style>
         body {
           background:#080808;
           color:white;
           font-family:Arial;
-          padding:30px;
+          padding:25px;
         }
         h1 {color:#a855f7}
         .card {
@@ -196,7 +230,7 @@ app.get("/dashboard", (req, res) => {
     <body>
       <h1>LYX SYSTEM</h1>
       <div class="card">
-        <img src="${avatar}" alt="">
+        ${avatar ? `<img src="${escapeHtml(avatar)}">` : ""}
         <h2>${escapeHtml(user.username)}</h2>
         <p>Discord Dashboard</p>
       </div>
@@ -210,22 +244,13 @@ app.get("/dashboard", (req, res) => {
   `);
 });
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
 app.get("/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/"));
+  req.session.destroy(() => {
+    res.clearCookie("lyx.sid");
+    res.redirect("/");
+  });
 });
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("LYX SYSTEM Dashboard is running!");
+app.listen(process.env.PORT || 3000, "0.0.0.0", () => {
+  console.log("LYX SYSTEM Dashboard started successfully!");
 });
