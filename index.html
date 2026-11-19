@@ -1,0 +1,84 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SYSTEM LYX | لوحة التحكم</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#09090d;color:#eee;font-family:Arial,sans-serif}
+header{padding:22px 7%;border-bottom:1px solid #252530;display:flex;justify-content:space-between;align-items:center}
+.logo{font-size:25px;font-weight:bold;letter-spacing:2px;color:#a78bfa}
+nav{display:flex;gap:10px;align-items:center}
+button{background:#8b5cf6;color:white;border:0;padding:12px 19px;border-radius:9px;cursor:pointer;font-weight:bold}
+main{max-width:1100px;margin:65px auto;padding:20px}
+.hero{background:linear-gradient(130deg,#171321,#101018);border:1px solid #302545;border-radius:18px;padding:35px}
+h1{font-size:34px;margin:0 0 12px}
+p{color:#aaa;line-height:1.8}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:17px;margin-top:25px}
+.card{background:#13131b;border:1px solid #292936;border-radius:14px;padding:23px}
+.card h3{color:#c4b5fd;margin-top:0}
+.card p{font-size:14px}
+.status{color:#86efac}
+footer{text-align:center;color:#666;padding:35px}
+</style>
+</head>
+<body>
+<header>
+<div class="logo">SYSTEM LYX</div>
+<nav>
+<button onclick="login()">تسجيل الدخول</button>
+</nav>
+</header>
+
+<main>
+<section class="hero">
+<h1>لوحة تحكم SYSTEM LYX</h1>
+<p>مرحبا بك في لوحة إدارة بوت LYX. تحكم في إعدادات سيرفرك من مكان واحد.</p>
+<button onclick="login()">الدخول عبر Discord</button>
+</section>
+
+<div class="grid">
+<div class="card">
+<h3>الترحيب</h3>
+<p>إدارة رسائل الترحيب وإعدادات دخول الأعضاء.</p>
+<span class="status">● نظام الترحيب</span>
+</div>
+<div class="card">
+<h3>السجلات</h3>
+<p>إعداد سجلات الرسائل والأعضاء والإدارة.</p>
+<span class="status">● نظام السجلات</span>
+</div>
+<div class="card">
+<h3>التذاكر</h3>
+<p>إدارة نظام التذاكر وقنوات الدعم.</p>
+<span class="status">● نظام التذاكر</span>
+</div>
+<div class="card">
+<h3>الحماية</h3>
+<p>إعدادات حماية السيرفر ومراقبة الأحداث.</p>
+<span class="status">● نظام الحماية</span>
+</div>
+<div class="card">
+<h3>الرتب</h3>
+<p>إدارة الرتب وصلاحيات الأعضاء.</p>
+<span class="status">● إدارة الرتب</span>
+</div>
+<div class="card">
+<h3>القيفاوي</h3>
+<p>إدارة المسابقات والسحوبات.</p>
+<span class="status">● نظام القيفاوي</span>
+</div>
+</div>
+</main>
+
+<footer>SYSTEM LYX © 2026</footer>
+
+<script>
+function login(){
+ alert('تسجيل الدخول عبر Discord سيتم تفعيله في الخطوة القادمة.');
+}
+</script>
+</body>
+</html>
